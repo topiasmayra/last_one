@@ -50,13 +50,12 @@ def i_suppose_i_have_earned_so_much_points(amount_of_points):
 
 last_click_time = 0  # Variable to keep track of when the button was last clicked
 
-
 # Variables to store the island's positions
 island_positions = []
 draw_islands = False
 
 # Make a Grid
-grid_size = 150  # Assume each cell is 150x150 pixels
+grid_size = 100  # Assume each cell is 150x150 pixels
 grid_width = window_surface.get_width() // grid_size
 grid_height = window_surface.get_height() // grid_size
 grid = [[[] for _ in range(grid_height)] for _ in range(grid_width)]
@@ -69,15 +68,27 @@ def add_to_grid(obj):
 def check_collision(obj):
     grid_x = obj.x // grid_size
     grid_y = obj.y // grid_size
-    for existing_obj in grid[grid_x][grid_y]:
-        if existing_obj.colliderect(obj):
-            return True
-    return False
+    
+    # Check the grid cell of the new island and the neighboring grid cells
+    for dx in range(-1, 2):  # dx will be -1, 0, 1
+        for dy in range(-1, 2):  # dy will be -1, 0, 1
+            # Calculate the coordinates of the neighboring grid cell
+            neighbor_x = grid_x + dx
+            neighbor_y = grid_y + dy
+            
+            # Check if the neighboring grid cell coordinates are within the grid bounds
+            if 0 <= neighbor_x < grid_width and 0 <= neighbor_y < grid_height:
+                # Check for collisions with existing objects in the neighboring grid cell
+                for existing_obj in grid[neighbor_x][neighbor_y]:
+                    if existing_obj.colliderect(obj):
+                        return True  # A collision was detected
+    
+    return False  # No collisions were detected
 
 def draw_island_random_location():
     if draw_islands:
-        island_width = 150
-        island_height = 150
+        island_width = 100
+        island_height = 100
         for island_position in island_positions:
             island_surface = pygame.Surface((island_width, island_height), pygame.SRCALPHA)
             pygame.draw.circle(island_surface, Yellow, (island_width // 2, island_height // 2), island_width // 2)
@@ -86,14 +97,14 @@ def draw_island_random_location():
 def new_islands():
     global draw_islands, island_positions
     draw_islands = True
-    if len(island_positions) < 10:
+    if len(island_positions) < 11:
         attempts = 0  # Counter to keep track of the number of attempts
-        max_attempts = 100  # Set a maximum number of attempts to prevent an infinite loop
+        max_attempts = 10000    # Set a maximum number of attempts to prevent an infinite loop
         while attempts < max_attempts:
             # Generate a new random coordinate for the island
             new_island_rect = pygame.Rect(
-                random.randint(150, window_surface.get_width() - 150),
-                random.randint(150, window_surface.get_height() - 150),
+                random.randint(50, window_surface.get_width() - 200),
+                random.randint(50, window_surface.get_height() - 200),
                 150, 150
             )
             # Check for collisions with existing islands and buttons using the grid
