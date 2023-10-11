@@ -39,7 +39,7 @@ all_monkeys = []
 keep_playing_sounds = True
 executor = ThreadPoolExecutor(max_workers=10)
 CHANGE_COLOR_BACK_EVENT = pygame.USEREVENT + 1
-
+islands_monkeys_dict = {}
 
 
 
@@ -182,26 +182,23 @@ monkey_lock = threading.Lock()
 
 
 def add_monkeys_to_island(island_name, island_position):
-    global all_monkeys
-    # Assuming each island can have its own set of monkeys
+    global all_monkeys, islands_monkeys_dict
+    monkeys = []  # List to hold the monkeys for this island
     for _ in range(10):  # Adding 10 monkeys to the island
         monkey_id = len(all_monkeys) + 1  # Generate a unique ID for each monkey
         monkey_frequency = random.randint(200, 1000)  # Assign a unique random frequency to each monkey
-        
-        
-        # You might want to randomize this within the island's area
         monkey_position = (island_position[0] + random.randint(-20, 20), 
                            island_position[1] + random.randint(-20, 20))
-        
         monkey = {
             'id': monkey_id,
             'frequency': monkey_frequency,
             'position': monkey_position,
             'island_name': island_name
         }
-        with monkey_lock:
-            all_monkeys.append(monkey)
-
+        monkeys.append(monkey)
+        all_monkeys.append(monkey)
+    with monkey_lock:
+        islands_monkeys_dict[island_name] = monkeys  # Update the dictionary with the monkeys list for this island
 
 
 
@@ -231,8 +228,30 @@ def monkey_sound_routine():
             for monkey in all_monkeys:
                 executor.submit(play_monkey_sound, monkey['frequency'])
         time.sleep(10)  # wait for ten seconds before playing the sounds again
+def monkey_die_laughing(island_name):
+    time.sleep(10)  # Wait for 10 seconds
+    island = next((island for island in island_positions if island['name'] == island_name), None)
+    if island:
+        with monkey_lock:
+            monkeys = islands_monkeys_dict.get(island_name, [])  # Get the list of monkeys for this island
+            monkey = next((monkey for monkey in monkeys if random.random() <= 0.51), None)
+            if monkey:
+                monkeys.remove(monkey)  # Remove the monkey from the island's list of monkeys
+                all_monkeys.remove(monkey)  # Also remove the monkey from the global list of all monkeys
+                islands_monkeys_dict[island_name] = monkeys  # Update the dictionary with the modified monkeys list
+                print(f"Monkey {monkey['id']} on island {island_name} died laughing")
+                winsound.Beep(666, 950)
 
 
+def monkey_dying_thread():
+    while running:
+        for island in island_positions:
+            monkey_die_laughing(island['name'])
+        time.sleep(1)
+# ... later in your code ...
+# Start the monkey_dying_thread
+dying_thread = threading.Thread(target=monkey_dying_thread)
+dying_thread.start()
 
 
 # Create a ThreadPoolExecutor
