@@ -3,6 +3,9 @@ import sys
 import time
 import random
 import winsound
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
 # Initialize pygame
 pygame.init()
 
@@ -31,6 +34,14 @@ island_positions = []
 draw_islands = False
 island_rects = []  # Define the island_rects list
 occupied_positions = []  # Define the occupied_positions list
+draw_islands = False
+all_monkeys = []
+keep_playing_sounds = True
+executor = ThreadPoolExecutor(max_workers=10)
+
+
+
+
 
 # Set up buttons
 buttons = [pygame.Rect(35 * i, 0, 35, 50) for i in range(20)] # Adjusted positions
@@ -76,21 +87,37 @@ def add_to_grid(obj):
     grid_x = obj.x // grid_size
     grid_y = obj.y // grid_size
     grid[grid_x][grid_y].append(obj)
-
 def draw_island_random_location():
-    global island_positions  # Add this line to access the global variable
+    global island_positions
     if draw_islands:
         island_width = 90
         island_height = 90
         for island in island_positions:
+            island_position = island['position']
             island_name = island['name']
             island_surface = pygame.Surface((island_width, island_height), pygame.SRCALPHA)
             pygame.draw.circle(island_surface, Yellow, (island_width // 2, island_height // 2), island_width // 2)
-            add_island_name(island_surface, island_name)  # Call add_island_name to add the name to the island_surface
-            window_surface.blit(island_surface, island['position'])
- 
+            
+            # Count the number of monkeys on this island
+            monkey_count = sum(1 for monkey in all_monkeys if monkey['island_name'] == island_name)
+            
+            # Create a font for displaying the text
+            text_font = pygame.font.Font(None, 20)
+            
+            # Combine the island name and monkey count into one string
+            text_string = f'{island_name}: {monkey_count}'
+            
+            # Render the text
+            text_surface = text_font.render(text_string, True, (0, 0, 0))
+            
+            # Calculate the position to center the text on the island surface
+            text_rect = text_surface.get_rect(center=(island_surface.get_width() // 2, island_surface.get_height() // 2))
+            
+            # Blit the text onto the island surface
+            island_surface.blit(text_surface, text_rect.topleft)
+            
+            window_surface.blit(island_surface, island_position)
 
-draw_islands = False  # Define draw_islands somewhere in the code
 def check_collision(obj_rect):
     for existing_rect in island_rects:
         if existing_rect.colliderect(obj_rect):
@@ -115,8 +142,8 @@ def add_island_name(surface, name):
     # Blit the island name text onto the island surface
     surface.blit(island_name_text, text_rect.topleft)  # Use topleft to position the text correctly
 
-def new_islands():
-    global island_positions, island_rects, draw_islands, num_islands, island_name, island_count  # Include num_islands in the global statement
+def create_new_island():
+    global island_positions, island_rects, draw_islands, num_islands, island_name, island_count, executor, sound_thread, keep_playing_sounds  # Include executor, sound_thread, keep_playing_sounds in the global statement
     
     # Get the window dimensions
     window_width, window_height = window_surface.get_size()
@@ -141,20 +168,109 @@ def new_islands():
                 island_rects.append(new_island_rect)  # Add the new island rect to the island_rects list
                 occupied_positions.append((x, y, island_width, island_height))  # Record the occupied position
                 add_to_grid(new_island_rect)
+                add_monkeys_to_island(island_name, (x, y))
                 draw_islands = True  # Set draw_islands to True 
+                if not sound_thread.is_alive() and not keep_playing_sounds:
+                        keep_playing_sounds = True  # Allow the sound routine to run again
+                        executor = ThreadPoolExecutor()  # Create a new ThreadPoolExecutor
+                        sound_thread = threading.Thread(target=monkey_sound_routine)  # Create a new sound thread
+                        sound_thread.start()  # Start the sound routine
                 break  # Exit the while loop once a new island has been successfully created
 
+monkey_lock = threading.Lock()  
 
+
+
+def add_monkeys_to_island(island_name, island_position):
+    global all_monkeys
+    # Assuming each island can have its own set of monkeys
+    for _ in range(10):  # Adding 10 monkeys to the island
+        monkey_id = len(all_monkeys) + 1  # Generate a unique ID for each monkey
+        monkey_frequency = random.randint(200, 1000)  # Assign a unique random frequency to each monkey
+        
+        
+        # You might want to randomize this within the island's area
+        monkey_position = (island_position[0] + random.randint(-20, 20), 
+                           island_position[1] + random.randint(-20, 20))
+        
+        monkey = {
+            'id': monkey_id,
+            'frequency': monkey_frequency,
+            'position': monkey_position,
+            'island_name': island_name
+        }
+        with monkey_lock:
+            all_monkeys.append(monkey)
+
+
+
+
+
+
+def play_monkey_sound():
+    frequency = random.randint(200, 1000)  # Generate a random frequency between 200 and 1000 Hz
+    duration = 500  # Duration of the sound in milliseconds
+    winsound.Beep(frequency, duration)
+
+
+def monkey_sound_routine():
+    while keep_playing_sounds:
+        for monkey in all_monkeys:
+            executor.submit(play_monkey_sound, monkey['frequency'])
+        time.sleep(10)  # wait for ten seconds before playing the sounds again
+
+
+def play_monkey_sound(frequency):
+    duration = 500
+    winsound.Beep(frequency, duration)
+
+def monkey_sound_routine():
+    global keep_playing_sounds
+    while keep_playing_sounds:
+        with monkey_lock:  # Acquire the lock when iterating through all_monkeys
+            for monkey in all_monkeys:
+                executor.submit(play_monkey_sound, monkey['frequency'])
+        time.sleep(10)  # wait for ten seconds before playing the sounds again
+
+
+
+
+# Create a ThreadPoolExecutor
+executor = ThreadPoolExecutor()
+
+# Start the monkey sound routine in a separate thread
+sound_thread = threading.Thread(target=monkey_sound_routine)
+sound_thread.start()
 
 def delete_all_islands():
-    global island_positions, island_rects, grid, occupied_positions,island_count
+    global island_positions, island_rects, grid, island_name ,occupied_positions, island_count, keep_playing_sounds, executor, sound_thread
+    executor.shutdown(wait=True)
     island_positions.clear()  # Clear the island_positions list
     island_rects.clear()  # Clear the island_rects list
     for x in range(grid_width):
         for y in range(grid_height):
             grid[x][y].clear()  # Clear each cell in the grid
     occupied_positions = []  # Reset the occupied_positions list
-    island_count=1  # Generate a unique name for the island
+    island_count = 1  # Reset the island_name variable
+    executor.shutdown(wait=True)  # Shutdown the executor and wait for all tasks to complete
+    executor = ThreadPoolExecutor(max_workers=10)  # Create a new ThreadPoolExecutor
+    keep_playing_sounds = False  # Stop the monkey sound routine
+    with monkey_lock:  # Acquire the lock to ensure the sound routine isn't accessing all_monkeys
+        all_monkeys.clear()  # Clear the all_monkeys list
+    executor.shutdown(wait=True)  # Shutdown the executor, waiting for all tasks to complete
+    if sound_thread.is_alive():
+        sound_thread.join()  
+    sound_thread = threading.Thread(target=monkey_sound_routine)  # Create a new sound_thread
+    sound_thread.start()  # Start the new sound_thread
+
+def restart_sound_thread():
+    global keep_playing_sounds, executor, sound_thread
+    keep_playing_sounds = True  # Allow the sound routine to run again
+    executor = ThreadPoolExecutor()  # Create a new ThreadPoolExecutor
+    sound_thread = threading.Thread(target=monkey_sound_routine)  # Create a new sound thread
+    sound_thread.start()  # Start the sound routi
+
+
 
 def handle_events():
     global last_click_time
@@ -164,11 +280,12 @@ def handle_events():
         elif event.type == pygame.MOUSEBUTTONUP:
             x, y = event.pos
             if button_island.collidepoint(x, y):
-                new_islands()
+                create_new_island()
                 print(f"Island {island_name} created")
                 button_island_color = Yellow
                 last_click_time = pygame.time.get_ticks()
             elif button_delete_islands.collidepoint(x, y):
+                button_delete_islands_color = GREEN
                 delete_all_islands()
             # Remove the else block to prevent calling delete_all_islands function when no button is clicked
     return True  # Indicate that the game should continue
@@ -184,6 +301,8 @@ while running:
     draw_buttons()  # Draw the buttons
     draw_island_random_location()  # Draw the island if necessary, ensuring it's on top
     pygame.display.update()
+    if not sound_thread.is_alive() and keep_playing_sounds:  # Check if the sound thread has stopped and should be restarted
+        restart_sound_thread()  # Restart the sound routine if necessary
 
 # Clean up
 pygame.quit()
