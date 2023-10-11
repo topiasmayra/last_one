@@ -38,7 +38,7 @@ draw_islands = False
 all_monkeys = []
 keep_playing_sounds = True
 executor = ThreadPoolExecutor(max_workers=10)
-
+CHANGE_COLOR_BACK_EVENT = pygame.USEREVENT + 1
 
 
 
@@ -241,27 +241,35 @@ executor = ThreadPoolExecutor()
 # Start the monkey sound routine in a separate thread
 sound_thread = threading.Thread(target=monkey_sound_routine)
 sound_thread.start()
-
 def delete_all_islands():
-    global island_positions, island_rects, grid, island_name ,occupied_positions, island_count, keep_playing_sounds, executor, sound_thread
+    global island_positions, island_rects, grid, island_name, occupied_positions
+    global island_count, keep_playing_sounds, executor, sound_thread
+    
+    # Shutdown Executor Once
     executor.shutdown(wait=True)
-    island_positions.clear()  # Clear the island_positions list
-    island_rects.clear()  # Clear the island_rects list
-    for x in range(grid_width):
-        for y in range(grid_height):
-            grid[x][y].clear()  # Clear each cell in the grid
-    occupied_positions = []  # Reset the occupied_positions list
-    island_count = 1  # Reset the island_name variable
-    executor.shutdown(wait=True)  # Shutdown the executor and wait for all tasks to complete
-    executor = ThreadPoolExecutor(max_workers=10)  # Create a new ThreadPoolExecutor
-    keep_playing_sounds = False  # Stop the monkey sound routine
-    with monkey_lock:  # Acquire the lock to ensure the sound routine isn't accessing all_monkeys
-        all_monkeys.clear()  # Clear the all_monkeys list
-    executor.shutdown(wait=True)  # Shutdown the executor, waiting for all tasks to complete
+    
+    # Clear the lists and reset variables
+    island_positions.clear()
+    island_rects.clear()
+    occupied_positions = []
+    island_count = 1
+    
+    # Grid Clearing Optimization
+    grid = [[[] for _ in range(grid_height)] for _ in range(grid_width)]
+    
+    # Stop the sound routine and clear all_monkeys list
+    keep_playing_sounds = False
+    with monkey_lock:  # Locking
+        all_monkeys.clear()
+    
+    # Thread Management
     if sound_thread.is_alive():
-        sound_thread.join()  
-    sound_thread = threading.Thread(target=monkey_sound_routine)  # Create a new sound_thread
-    sound_thread.start()  # Start the new sound_thread
+        sound_thread.join()
+    
+    # Reinitialize the executor and sound_thread for the next run
+    executor = ThreadPoolExecutor(max_workers=10)  # ThreadPoolExecutor Configuration
+    sound_thread = threading.Thread(target=monkey_sound_routine)
+    sound_thread.start()
 
 def restart_sound_thread():
     global keep_playing_sounds, executor, sound_thread
@@ -272,28 +280,48 @@ def restart_sound_thread():
 
 
 
-def handle_events():
-    global last_click_time
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            return False  # Indicate that the game should end
-        elif event.type == pygame.MOUSEBUTTONUP:
-            x, y = event.pos
-            if button_island.collidepoint(x, y):
-                create_new_island()
-                print(f"Island {island_name} created")
-                button_island_color = Yellow
-                last_click_time = pygame.time.get_ticks()
-            elif button_delete_islands.collidepoint(x, y):
-                button_delete_islands_color = GREEN
-                delete_all_islands()
-            # Remove the else block to prevent calling delete_all_islands function when no button is clicked
-    return True  # Indicate that the game should continue
+def handle_mouse_up(event):
+    global last_click_time, button_island_color, button_delete_islands_color  # Ensure all necessary variables are global
+    x, y = event.pos
+    if button_island.collidepoint(x, y):
+        create_new_island()
+        print(f"Island {island_name} created")
+        button_island_color = Yellow
+        last_click_time = pygame.time.get_ticks()
+    elif button_delete_islands.collidepoint(x, y):
+        button_delete_islands_color = GREEN
+        delete_all_islands()
+        pygame.time.set_timer(CHANGE_COLOR_BACK_EVENT, 50)  # Set a timer to change color back in 500 milliseconds
 
+def handle_quit(event):
+    pygame.quit()
+    sys.exit()
+
+def handle_events(events):
+    for event in events:
+        handler = event_handlers.get(event.type)
+        if handler:
+            handler(event)
+def handle_change_color_back(event):
+    global button_delete_islands_color
+    button_delete_islands_color = RED
+
+event_handlers = {
+    pygame.MOUSEBUTTONUP: handle_mouse_up,
+    pygame.QUIT: handle_quit,
+    CHANGE_COLOR_BACK_EVENT: handle_change_color_back,
+}
+def handle_events(events):
+    for event in events:
+        handler = event_handlers.get(event.type)
+        if handler:
+            handler(event)
 
 running = True
+running = True
 while running:
-    running = handle_events()  # Call handle_events and update running based on its return value
+    events = pygame.event.get()
+    handle_events(events)  # Call handle_events with the list of current events
     current_time = pygame.time.get_ticks()  # Get the current time
     if button_island_color == Yellow and current_time - last_click_time >= 50:  # Check if 1 second has passed
         button_island_color = NICE  # Change the color of the button back to NICE
@@ -303,7 +331,6 @@ while running:
     pygame.display.update()
     if not sound_thread.is_alive() and keep_playing_sounds:  # Check if the sound thread has stopped and should be restarted
         restart_sound_thread()  # Restart the sound routine if necessary
-
 # Clean up
 pygame.quit()
 sys.exit()
