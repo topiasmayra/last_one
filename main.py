@@ -29,7 +29,8 @@ num_islands=0
 # Variables to store the island's positions
 island_positions = []
 draw_islands = False
-
+island_rects = []  # Define the island_rects list
+occupied_positions = []  # Define the occupied_positions list
 
 # Set up buttons
 buttons = [pygame.Rect(35 * i, 0, 35, 50) for i in range(20)] # Adjusted positions
@@ -76,17 +77,18 @@ def add_to_grid(obj):
     grid_y = obj.y // grid_size
     grid[grid_x][grid_y].append(obj)
 
-
 def draw_island_random_location():
+    global island_positions  # Add this line to access the global variable
     if draw_islands:
         island_width = 90
         island_height = 90
-        for island_position in island_positions:
+        for island in island_positions:
+            island_name = island['name']
             island_surface = pygame.Surface((island_width, island_height), pygame.SRCALPHA)
             pygame.draw.circle(island_surface, Yellow, (island_width // 2, island_height // 2), island_width // 2)
-            window_surface.blit(island_surface, island_position)
-island_rects = []  # Define the island_rects list
-
+            add_island_name(island_surface, island_name)  # Call add_island_name to add the name to the island_surface
+            window_surface.blit(island_surface, island['position'])
+ 
 
 draw_islands = False  # Define draw_islands somewhere in the code
 def check_collision(obj_rect):
@@ -115,6 +117,10 @@ def add_island_name(surface, name):
 
 def new_islands():
     global island_positions, island_rects, draw_islands, num_islands, island_name, island_count  # Include num_islands in the global statement
+    
+    # Get the window dimensions
+    window_width, window_height = window_surface.get_size()
+    
     island_name = "S" + str(island_count)  # Generate a unique name for the island
     island_count += 1  # Increment the island count
     if len(island_positions) < 10:  # Check if the number of islands is less than 10
@@ -126,26 +132,19 @@ def new_islands():
             new_island_rect = pygame.Rect(x, y, island_width, island_height)
             
             # Check if the new island collides with any buttons
-            button_collided = False
-            for button in buttons:
-                if button.colliderect(new_island_rect):
-                    button_collided = True
-                    break
+            button_collided = any(button.colliderect(new_island_rect) for button in buttons)
+            button_collided = button_collided or button_delete_islands.colliderect(new_island_rect) or button_island.colliderect(new_island_rect)
             
-            # Check if the new island collides with the delete_islands button
-            if button_delete_islands.colliderect(new_island_rect):
-                button_collided = True
-            
+            # Check if the new island collides with other islands or the new_island button
             if not button_collided and not check_collision(new_island_rect):
-                island_positions.append((x, y))
+                island_positions.append({'position': (x, y), 'name': island_name})  # Append new island info as a dictionary
                 island_rects.append(new_island_rect)  # Add the new island rect to the island_rects list
                 occupied_positions.append((x, y, island_width, island_height))  # Record the occupied position
                 add_to_grid(new_island_rect)
                 draw_islands = True  # Set draw_islands to True 
                 break  # Exit the while loop once a new island has been successfully created
-window_width, window_height = window_surface.get_size()
 
-occupied_positions = []
+
 
 def delete_all_islands():
     global island_positions, island_rects, grid, occupied_positions,island_count
