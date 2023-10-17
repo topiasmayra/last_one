@@ -6,6 +6,7 @@ import winsound
 import threading
 from concurrent.futures import ThreadPoolExecutor
 import datetime
+import math
 # Initialize pygame
 pygame.init()
 
@@ -75,9 +76,6 @@ def draw_buttons(current_point=None):  # Added current_point argument here
         label = font.render(f'{point_values[i]}', True, (0, 0, 0))
         window_surface.blit(label, (button.x + 10, button.y + 15))
 
-
-
-
 def i_suppose_i_have_earned_so_much_points(amount_of_points):
     global points
     window_surface.fill((0, 0, 255))
@@ -92,7 +90,7 @@ def i_suppose_i_have_earned_so_much_points(amount_of_points):
 
 
 # Make a Grid
-grid_size = 60  # Assume each cell is 150x150 pixels
+grid_size = 90  # Assume each cell is 150x150 pixels
 grid_width = window_surface.get_width() // grid_size
 grid_height = window_surface.get_height() // grid_size
 grid = [[[] for _ in range(grid_height)] for _ in range(grid_width)]
@@ -101,6 +99,34 @@ def add_to_grid(obj):
     grid_x = obj.x // grid_size
     grid_y = obj.y // grid_size
     grid[grid_x][grid_y].append(obj)
+def draw_piers(surface, island_position):
+    pier_length = 50  # Adjust this value as needed to ensure piers reach the sea
+    pier_color = (139, 69, 19)  # Brown color for piers
+
+    # The center coordinates of the island on the window_surface
+    island_center = (island_position[0] + 45, island_position[1] + 45)
+
+    # Coordinates for the start of the piers, relative to the island's position on the window_surface
+    east_pier_start = (island_center[0] + 45, island_center[1])
+    west_pier_start = (island_center[0] - 45, island_center[1])
+    south_pier_start = (island_center[0], island_center[1] + 45)
+    north_pier_start = (island_center[0], island_center[1] - 45)
+
+    # Coordinates for the end of the piers, extending into the sea
+    east_pier_end = (east_pier_start[0] + pier_length, east_pier_start[1])
+    west_pier_end = (west_pier_start[0] - pier_length, west_pier_start[1])
+    south_pier_end = (south_pier_start[0], south_pier_start[1] + pier_length)
+    north_pier_end = (north_pier_start[0], north_pier_start[1] - pier_length)
+
+    # Draw piers in all four directions from the island edges
+    pygame.draw.line(surface, pier_color, east_pier_start, east_pier_end, 5)  # East
+    pygame.draw.line(surface, pier_color, west_pier_start, west_pier_end, 5)  # West
+    pygame.draw.line(surface, pier_color, south_pier_start, south_pier_end, 5)  # South
+    pygame.draw.line(surface, pier_color, north_pier_start, north_pier_end, 5)  # North
+
+
+
+
 def draw_island_random_location():
     global island_positions
     if draw_islands:
@@ -109,8 +135,19 @@ def draw_island_random_location():
         for island in island_positions:
             island_position = island['position']
             island_name = island['name']
+            
+            # Create a new surface for the island
             island_surface = pygame.Surface((island_width, island_height), pygame.SRCALPHA)
+
+            
+            # Choose whether to draw a circle or square based on some condition,
+            # or comment out one of the following two lines if you only want one shape
             pygame.draw.circle(island_surface, Yellow, (island_width // 2, island_height // 2), island_width // 2)
+            pygame.draw.rect(island_surface, Yellow, (0, 0, island_width, island_height))
+            
+            # Check if the island is tourism_aware and draw piers if it is
+            if island.get('tourism_aware', False):  # Using get() in case 'tourism_aware' key doesn't exist
+               draw_piers(window_surface, island_position)
             
             # Count only monkeys that are on the island (exclude those in the sea)
             monkey_count = sum(1 for monkey in all_monkeys if monkey['island_name'] == island_name and not monkey['in_sea'])
@@ -130,8 +167,8 @@ def draw_island_random_location():
             # Blit the text onto the island surface
             island_surface.blit(text_surface, text_rect.topleft)
             
+            # Blit the island surface onto the window surface at the island's position
             window_surface.blit(island_surface, island_position)
-
 
 def check_collision(obj_rect):
     for existing_rect in island_rects:
@@ -159,7 +196,6 @@ def add_island_name(surface, name):
 
 def create_new_island():
     global island_positions, island_rects, draw_islands, num_islands, island_name, island_count, executor, sound_thread, keep_running, keep_running, combined_monkey_thread_instance  # Include executor, sound_thread, keep_playing_sounds in the global statement, delete_button_hit
-    # Get the window dimensions
     window_width, window_height = window_surface.get_size()
     
     island_name = "S" + str(island_count)  # Generate a unique name for the island
@@ -175,15 +211,18 @@ def create_new_island():
             # Check if the new island collides with any buttons
             button_collided = any(button.colliderect(new_island_rect) for button in buttons)
             button_collided = button_collided or button_delete_islands.colliderect(new_island_rect) or button_island.colliderect(new_island_rect)
-            
+            tourism_aware = True if island_name == 'S1' else False  # Island S1 is tourism aware
+    
             # Check if the new island collides with other islands or the new_island button
             if not button_collided and not check_collision(new_island_rect):
-                island_positions.append({'position': (x, y), 'name': island_name})  # Append new island info as a dictionary
                 island_rects.append(new_island_rect)  # Add the new island rect to the island_rects list
                 occupied_positions.append((x, y, island_width, island_height))  # Record the occupied position
                 add_to_grid(new_island_rect)
                 add_monkeys_to_island(island_name, (x, y))
                 draw_islands = True  # Set draw_islands to True 
+                island_info = {'position': (x, y), 'name': island_name, 'tourism_aware': tourism_aware}
+                island_positions.append(island_info)  # Append new island info as a dictionary
+
                 if delete_button_hit and len(island_positions) == 10:
                     i_suppose_i_have_earned_so_much_points(5)
 
@@ -221,7 +260,9 @@ def add_monkeys_to_island(island_name, island_position):
             'position': monkey_position,
             'island_name': island_name,
             'can_swim': can_swim,
-            'in_sea': False  # Monkey's current position (not in sea initially)
+            'in_sea': False,
+            'scoop_direction': None,  
+             'angle': 0
         }
 
         monkeys.append(monkey)
@@ -258,13 +299,15 @@ island_names = ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9", "S10"]  # 
 
 
 def combined_monkey_thread():
-    point_flag=False
+    print("Starting combined_monkey_thread")
+    point_flag = False
     last_island_check = datetime.datetime.now()  # To track when we last checked island events
-
+    last_scoop_check = datetime.datetime.now()  # To track when we last checked scoop events
+    print (f'last_island_check: {last_island_check}')    
     while running and keep_running:
         with monkey_lock:
             current_time = datetime.datetime.now()
-
+            print(f'current_time: {current_time}')
             # Check each monkey for island events if it's been more than 10 seconds
             if (current_time - last_island_check).seconds >= 10:
                 for monkey in all_monkeys:
@@ -277,6 +320,7 @@ def combined_monkey_thread():
 
             # Check each monkey for sea events
             for monkey in all_monkeys:
+                print(f"Monkey {monkey['id']} position: {monkey['position']}, in_sea: {monkey['in_sea']}")  # Debugging output
                 if monkey['in_sea'] and random.random() < 0.01:  # 1% chance every second
                     all_monkeys.remove(monkey)
                     print(f"{current_time} - Monkey {monkey['id']} in the sea got eaten")
@@ -288,11 +332,49 @@ def combined_monkey_thread():
                     if SEA_RECT.collidepoint(monkey['position']):
                         monkey['in_sea'] = True
                         print(f"{current_time} - Monkey {monkey['id']} on island {monkey['island_name']} moved to sea")
-      
 
+            # Check for monkey scoop events if it's been more than 10 seconds
+            if (current_time - last_scoop_check).seconds >= 10:
+                for island in island_positions:
+                    if island['tourism_aware']:
+                        monkeys_on_island = [monkey for monkey in all_monkeys if monkey['island_name'] == island['name'] and not monkey['in_sea']]
+                        if monkeys_on_island:
+                            monkey_to_scoop = random.choice(monkeys_on_island)
+                            monkey_to_scoop['scoop_direction'] = random.choice(['north', 'east', 'south', 'west'])
+                            print(f"{current_time} - Monkey {monkey_to_scoop['id']} on island {island['name']} scooping {monkey_to_scoop['scoop_direction']}")
+                            winsound.Beep(500, 500)  # Placeholder for your sound effect
+                            # Assume you have a function render_scoop to visualize the scooping
+                            render_scoop(monkey_to_scoop)
+                last_scoop_check = current_time
+def render_scoop(monkey):
+    global window_surface
 
-combined_monkey_thread_instance = threading.Thread(target=combined_monkey_thread)
-combined_monkey_thread_instance.start()
+    # Get the monkey's position and scooping direction
+    x, y = monkey['position']
+    scoop_direction = monkey['scoop_direction']
+    angle = monkey['angle']  # Get the current angle
+
+    # Determine the center of the circular scooping path based on the direction
+    if scoop_direction == 'north':
+        center_x, center_y = x, y - 20  # Adjust values as needed
+    elif scoop_direction == 'east':
+        center_x, center_y = x + 20, y  # Adjust values as needed
+    elif scoop_direction == 'south':
+        center_x, center_y = x, y + 20  # Adjust values as needed
+    elif scoop_direction == 'west':
+        center_x, center_y = x - 20, y  # Adjust values as needed
+
+    # Calculate the new position along the circular path
+    scoop_radius = 20  # Radius of the scooping circle
+    scoop_x = center_x + scoop_radius * math.cos(math.radians(angle))
+    scoop_y = center_y + scoop_radius * math.sin(math.radians(angle))
+
+    # Increment the angle for the next frame
+    monkey['angle'] = (angle + 10) % 360  # Adjust the value 10 to control the speed of scooping
+
+    # Draw the monkey as a dot at the new position
+    pygame.draw.circle(window_surface, RED, (int(scoop_x), int(scoop_y)), 5)
+
 start_sound_thread()
 
 def delete_all_islands():
@@ -386,6 +468,10 @@ while running:
     window_surface.fill(BLUE)
     draw_buttons()
     draw_island_random_location()
+    for monkey in all_monkeys:
+        if monkey['scoop_direction']:
+            render_scoop(monkey)
+
     pygame.display.update()
 
 
