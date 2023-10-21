@@ -100,7 +100,7 @@ def add_to_grid(obj):
     grid_y = obj.y // grid_size
     grid[grid_x][grid_y].append(obj)
 def draw_piers(surface, island_position):
-    pier_length = 50  # Adjust this value as needed to ensure piers reach the sea
+    pier_length = 30  # Adjust this value as needed to ensure piers reach the sea
     pier_color = (139, 69, 19)  # Brown color for piers
 
     # The center coordinates of the island on the window_surface
@@ -262,7 +262,8 @@ def add_monkeys_to_island(island_name, island_position):
             'can_swim': can_swim,
             'in_sea': False,
             'scoop_direction': None,  
-             'angle': 0
+             'angle': 0,
+             'previous_island': None,
         }
 
         monkeys.append(monkey)
@@ -311,7 +312,7 @@ def combined_monkey_thread():
             # Check each monkey for island events if it's been more than 10 seconds
             if (current_time - last_island_check).seconds >= 10:
                 for monkey in all_monkeys:
-                    if not monkey['in_sea'] and random.random() < 0.01:  # 1% chance
+                    if not monkey['in_sea'] and random.random() < 0.00:  # 1% chance
                         if monkey in all_monkeys:
                             all_monkeys.remove(monkey)
                             print(f"{current_time} - Monkey {monkey['id']} on island {monkey['island_name']} died laughing")
@@ -332,7 +333,14 @@ def combined_monkey_thread():
                     if SEA_RECT.collidepoint(monkey['position']):
                         monkey['in_sea'] = True
                         print(f"{current_time} - Monkey {monkey['id']} on island {monkey['island_name']} moved to sea")
-
+ # Monkey moving between islands logic
+                for island in island_positions:
+                    island_rect = pygame.Rect(*island['position'], 90, 90)  # Assuming islands are 90x90
+                    if island_rect.collidepoint(monkey['position']):
+                        if monkey['island_name'] != island['name'] and (monkey.get('previous_island') != island['name']):
+                            monkey['previous_island'] = monkey['island_name']
+                            monkey['island_name'] = island['name']
+                            print(f"{current_time} - Monkey {monkey['id']} moved to island {island['name']}")
             # Check for monkey scoop events if it's been more than 10 seconds
             if (current_time - last_scoop_check).seconds >= 10:
                 for island in island_positions:
@@ -346,6 +354,24 @@ def combined_monkey_thread():
                             # Assume you have a function render_scoop to visualize the scooping
                             render_scoop(monkey_to_scoop)
                 last_scoop_check = current_time
+def make_other_islands_tourist_friendly(arrived_island_name):
+    global island_positions
+    for island in island_positions:
+        if island['name'] != arrived_island_name:
+            island['tourism_aware'] = True
+            # Draw platforms or piers
+            draw_piers(window_surface, island['position'])
+
+
+def check_monkey_arrival():
+    global all_monkeys, island_positions
+    for monkey in all_monkeys:
+        for island in island_positions:
+            if pygame.Rect(*island['position'], 90, 90).collidepoint(monkey['position']):
+                make_other_islands_tourist_friendly(island['name'])
+
+
+
 def render_scoop(monkey):
     global window_surface
 
@@ -471,6 +497,7 @@ while running:
     for monkey in all_monkeys:
         if monkey['scoop_direction']:
             render_scoop(monkey)
+    check_monkey_arrival()
 
     pygame.display.update()
 
