@@ -404,9 +404,9 @@ def combined_monkey_thread():
                         print(f"{current_time} - Monkey {monkey['id']} in the sea got eaten")
                 last_scoop_check = current_time  # Update the time of the last sea events check
 
-
+points5= False
 def check_monkey_arrival():
-    global all_monkeys, island_positions
+    global all_monkeys, island_positions, points5
     for monkey in all_monkeys:
         for island in island_positions:
             island_rect = pygame.Rect(*island['position'], 90, 90)  # Assuming islands are 90x90
@@ -421,6 +421,7 @@ def check_monkey_arrival():
                     island['tourism_aware'] = True
                     
                     print(f"{datetime.datetime.now()} - Monkey {monkey['id']} arrived at island {island['name']}")
+                    points5 = True
 def monkey_swim_randomly(monkey):
     while monkey['in_sea']:
         # Generate a random angle for the monkey's movement direction
@@ -506,9 +507,12 @@ monkey_swim_thread = threading.Thread(target=monkey_swim_randomly)
 # Start your threads
 monkey_render_thread.start()
 monkey_swim_thread.start()
-    
-
-
+def points_15(monkey):
+        global all_monkeys, island_positions, points5
+        flag = False
+        if monkey['in_sea'] and  points5 == True and flag == False:
+            i_suppose_i_have_earned_so_much_points(15)
+            flag = True
 def play_scoop_sound():
     winsound.Beep(666, 10)
 
@@ -567,6 +571,8 @@ while running:
     for monkey in all_monkeys:
         if monkey['scoop_direction']:
             render_scoop(monkey)
+        if monkey['in_sea']:
+            points_15(monkey)
     check_monkey_arrival()
     
 
